@@ -30,10 +30,17 @@ FRAME_INTERVAL = 1           # seconds between sampled frames
 
 # The infographic is a full-screen slide, and template.png is a full frame of
 # it. We resize each video frame to the template's size and correlate the whole
-# frame, so matching is independent of the download resolution. Threshold is
-# deliberately loose: the static layout dominates, so the real slide scores far
-# above talking-head frames (~0.2) even as the date/bets text changes daily.
+# frame, so matching is independent of the download resolution.
+#
+# MATCH_THRESHOLD is the loose floor for accepting the best frame: the static
+# layout dominates, so the real slide scores far above talking-head frames
+# (~-0.04) even as the date/bets text changes daily.
 MATCH_THRESHOLD = 0.60
+# EARLY_EXIT_THRESHOLD: once a frame scores this high we're confident it's the
+# slide, so stop scanning immediately instead of finishing the clip. Today's
+# exact-match frame scores ~0.998; future days (different text) score lower, so
+# if this never triggers we fall back to the best frame over the whole clip.
+EARLY_EXIT_THRESHOLD = 0.90
 
 # Download retries within a single run (the hourly cron is the outer retry).
 DOWNLOAD_ATTEMPTS = 3
@@ -247,6 +254,11 @@ def extract_infographic(video_file):
             best_score = score
             best_frame = frame.copy()
             best_ts = timestamp
+
+        # Clearly the slide — stop scanning the rest of the clip.
+        if score >= EARLY_EXIT_THRESHOLD:
+            print(f"Strong match (score={score:.3f}) — stopping early.")
+            break
 
         current_frame += frame_skip
 
