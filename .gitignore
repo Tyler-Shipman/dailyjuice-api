@@ -1,0 +1,9 @@
+latest_video.*
+*.mp4
+*.webm
+
+todays_bets.png
+
+cache_*.png
+
+__pycache__/
