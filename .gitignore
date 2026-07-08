@@ -9,5 +9,8 @@ cache_*.png
 last_uploaded.txt
 cron.log
 env.sh
+.venv/
+test_clip.*
+test.*
 
 __pycache__/

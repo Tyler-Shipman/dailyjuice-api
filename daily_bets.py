@@ -127,10 +127,13 @@ def base_ydl_opts(**extra):
         "playlist_items": "1",
         "quiet": False,
         "ignoreerrors": False,
-        # Clients that work well cookieless behind a residential IP.
+        # tv_embedded returns full formats cookieless on a residential IP,
+        # with no DRM and no PO token required (the tv/ios/web clients now
+        # need one or the other). Requires a JS runtime (Deno) for the
+        # n-challenge. Verified against this channel.
         "extractor_args": {
             "youtube": {
-                "player_client": ["tv", "web_safari", "ios"],
+                "player_client": ["tv_embedded"],
             }
         },
     }
@@ -166,7 +169,8 @@ def download_section(duration_seconds):
     end_s = duration_seconds * SECTION_END_PERCENT
 
     opts = base_ydl_opts(
-        format="bestvideo[height<=720]+bestaudio/best[height<=720]/best",
+        # Video only — we just need frames for template matching, no audio.
+        format="bestvideo[height<=720]/best[height<=720]/best",
         outtmpl=f"{VIDEO_NAME}.%(ext)s",
         download_ranges=yt_dlp.utils.download_range_func(None, [(start_s, end_s)]),
         force_keyframes_at_cuts=True,

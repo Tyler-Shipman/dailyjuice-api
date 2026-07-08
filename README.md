@@ -12,7 +12,8 @@ fetches a static image URL.
 ```
 Raspberry Pi (residential IP — no cookies, no proxy)
         │  cron, hourly in a morning window
-        ├─ yt-dlp downloads only the 40–70% slice of the latest episode
+        ├─ yt-dlp (tv_embedded client + Deno for the n-challenge)
+        │     downloads only the 40–70% slice of the latest episode
         ├─ OpenCV template match (template.png) ──► todays_bets.png
         └─ upload to Cloudflare R2  (key: todays-bets.png)
 
@@ -41,29 +42,38 @@ with **no proxy and no manual refresh**. The Pi is never exposed to the internet
 3. Create an R2 API token with **Object Read & Write**. Note the Account ID,
    Access Key ID, and Secret Access Key.
 
-### 2. Raspberry Pi
+### 2. Raspberry Pi (64-bit Raspberry Pi OS Lite)
 
 ```bash
 # Match the show's timezone so "today" and the 7am schedule line up.
 sudo timedatectl set-timezone America/Chicago
 
 sudo apt update
-sudo apt install -y python3-venv python3-pip ffmpeg git
+# OpenCV from apt (prebuilt — avoids a multi-hour source build on a Pi 3B).
+sudo apt install -y python3-venv python3-pip ffmpeg git unzip python3-opencv
+
+# Deno: JS runtime yt-dlp needs to solve YouTube's n-challenge (nsig).
+curl -fsSL https://deno.land/install.sh | sh   # installs to ~/.deno/bin
 
 git clone https://github.com/Tyler-Shipman/dailyjuice-api.git
 cd dailyjuice-api
 
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+# --system-site-packages lets the venv import the apt-installed cv2.
+python3 -m venv --system-site-packages .venv
+.venv/bin/pip install -U pip
+# yt-dlp[default] bundles the yt-dlp-ejs n-challenge solver scripts.
+.venv/bin/pip install -U "yt-dlp[default]" boto3 curl-cffi
 ```
 
-Create `~/dailyjuice-api/env.sh` with your R2 credentials (chmod 600):
+Create `~/dailyjuice-api/env.sh` (chmod 600) with your R2 credentials **and** the
+Deno path (cron needs Deno on PATH):
 
 ```bash
 export R2_ACCOUNT_ID="..."
 export R2_ACCESS_KEY_ID="..."
 export R2_SECRET_ACCESS_KEY="..."
 export R2_BUCKET="dailyjuice"
+export PATH="$HOME/.deno/bin:$PATH"
 ```
 
 Test it end-to-end (force a real download regardless of date; does not write the
