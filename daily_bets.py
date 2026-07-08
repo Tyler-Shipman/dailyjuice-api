@@ -96,11 +96,12 @@ print("Downloading latest Daily Juice episode...")
 
 ydl_opts = {
     "playlist_items": "1",
-    "format": "best[height<=720]",
+    "format": "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
     "outtmpl": f"{VIDEO_NAME}.%(ext)s",
     "quiet": False,
     "ignoreerrors": True,
-    "cookiefile": "/etc/secrets/cookies.txt"
+    "cookiefile": "/etc/secrets/cookies.txt",
+    "no_cookie_jar": True,
 }
 
 with yt_dlp.YoutubeDL(ydl_opts) as ydl:

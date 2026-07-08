@@ -1,4 +1,4 @@
 fastapi
 uvicorn
 opencv-python-headless
-yt-dlp
+yt-dlp[default]==2026.7.4
