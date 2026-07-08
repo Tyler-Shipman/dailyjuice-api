@@ -20,8 +20,9 @@ iOS Shortcut ──► GET https://<r2-public-url>/todays-bets.png ──► Qui
 ```
 
 `daily_bets.py` exits cheaply until the newest playlist item's `upload_date` is
-today, then produces the image once and self-gates for the rest of the day via
-the `latest.json` marker in R2.
+today, then produces the image once and records the date in a local
+`last_uploaded.txt` file so the hourly cron stops for the rest of the day.
+**R2 holds exactly one object** — `todays-bets.png`, overwritten each day.
 
 **Why the Pi:** the original Render setup downloaded from a datacenter IP, which
 YouTube flags aggressively — forcing a `cookies.txt` that had to be re-exported
@@ -43,6 +44,9 @@ with **no proxy and no manual refresh**. The Pi is never exposed to the internet
 ### 2. Raspberry Pi
 
 ```bash
+# Match the show's timezone so "today" and the 7am schedule line up.
+sudo timedatectl set-timezone America/Chicago
+
 sudo apt update
 sudo apt install -y python3-venv python3-pip ffmpeg git
 
@@ -71,14 +75,15 @@ source env.sh
 FORCE=1 .venv/bin/python daily_bets.py
 ```
 
-Then schedule it with cron (`crontab -e`). Runs hourly across a morning window —
-the script no-ops until today's episode is up, then runs once:
+Then schedule it with cron (`crontab -e`). Runs hourly 7am–noon CT — the script
+no-ops until today's episode is up, then runs once and the local marker stops it
+for the rest of the day:
 
 ```cron
-0 6-12 * * * cd /home/pi/dailyjuice-api && source env.sh && .venv/bin/python daily_bets.py >> /home/pi/dailyjuice-api/cron.log 2>&1
+0 7-12 * * * cd /home/pi/dailyjuice-api && source env.sh && .venv/bin/python daily_bets.py >> /home/pi/dailyjuice-api/cron.log 2>&1
 ```
 
-(Adjust the hour range to your local time / the show's posting time.)
+(Widen the hour range if the show ever posts later than noon.)
 
 ### 3. iOS Shortcut
 

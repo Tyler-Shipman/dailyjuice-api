@@ -1,11 +1,9 @@
 import glob
-import json
 import os
 import time
 from datetime import datetime
 
 import boto3
-from botocore.exceptions import ClientError
 import cv2
 import yt_dlp
 
@@ -56,19 +54,26 @@ R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID")
 R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY")
 R2_BUCKET = os.environ.get("R2_BUCKET")
 
+# The single image kept in R2, overwritten each day.
 R2_OUTPUT_KEY = "todays-bets.png"
-R2_MARKER_KEY = "latest.json"
+
+# Local file that records the date we last uploaded, so the hourly cron stops
+# re-downloading once today's image is done. Kept on the Pi (not in R2), so R2
+# holds only the one image.
+MARKER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_uploaded.txt")
 
 # Set FORCE=1 to bypass the "already done today" / "not posted yet" gates
-# (useful for local testing).
+# (useful for local testing). A forced run does not write the marker.
 FORCE = os.environ.get("FORCE") == "1"
 
 R2_CONFIGURED = all(
     [R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET]
 )
 
-# yt-dlp reports upload_date as YYYYMMDD (UTC).
-TODAY = datetime.utcnow().strftime("%Y%m%d")
+# Local date. On the Pi (set to America/Chicago) the morning posting window
+# shares its calendar date with YouTube's UTC upload_date, so a strict match
+# is reliable.
+TODAY = datetime.now().strftime("%Y%m%d")
 
 
 # ==========================================================
@@ -85,38 +90,32 @@ def r2_client():
     )
 
 
-def get_marker_date(client):
-    """Return the date (YYYYMMDD) of the last uploaded image, or None."""
-    try:
-        obj = client.get_object(Bucket=R2_BUCKET, Key=R2_MARKER_KEY)
-        data = json.loads(obj["Body"].read())
-        return data.get("date")
-    except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code")
-        if code in ("NoSuchKey", "404"):
-            return None
-        raise
-
-
-def upload_results(client, write_marker=True):
+def upload_results(client):
     client.upload_file(
         OUTPUT_FILE,
         R2_BUCKET,
         R2_OUTPUT_KEY,
         ExtraArgs={"ContentType": "image/png"},
     )
-    if write_marker:
-        client.put_object(
-            Bucket=R2_BUCKET,
-            Key=R2_MARKER_KEY,
-            Body=json.dumps({"date": TODAY}).encode(),
-            ContentType="application/json",
-        )
-        print(f"Uploaded {R2_OUTPUT_KEY} and {R2_MARKER_KEY} to R2 bucket {R2_BUCKET}")
-    else:
-        # Forced/test run: publish the image but don't claim today is done,
-        # so the scheduled run still regenerates once the real episode posts.
-        print(f"Uploaded {R2_OUTPUT_KEY} to R2 bucket {R2_BUCKET} (marker not written; FORCE run)")
+    print(f"Uploaded {R2_OUTPUT_KEY} to R2 bucket {R2_BUCKET}")
+
+
+# ==========================================================
+# Local "done for today" marker
+# ==========================================================
+
+def read_marker():
+    """Return the YYYYMMDD date we last successfully uploaded, or None."""
+    try:
+        with open(MARKER_FILE) as fh:
+            return fh.read().strip()
+    except OSError:
+        return None
+
+
+def write_marker(date):
+    with open(MARKER_FILE, "w") as fh:
+        fh.write(date)
 
 
 # ==========================================================
@@ -128,8 +127,7 @@ def base_ydl_opts(**extra):
         "playlist_items": "1",
         "quiet": False,
         "ignoreerrors": False,
-        # Clients that work well cookieless behind a residential IP and pair
-        # with the PO-token auto-provider.
+        # Clients that work well cookieless behind a residential IP.
         "extractor_args": {
             "youtube": {
                 "player_client": ["tv", "web_safari", "ios"],
@@ -260,13 +258,12 @@ def main():
     if client is None:
         print("R2 not configured — running locally without the date gate or upload.")
 
-    # 1. Skip if we already produced today's image.
-    if client is not None and not FORCE:
-        if get_marker_date(client) == TODAY:
-            print(f"Today's image ({TODAY}) already exists in R2. Nothing to do.")
-            return
+    # 1. Skip if we already produced today's image (local marker).
+    if not FORCE and read_marker() == TODAY:
+        print(f"Already have today's image ({TODAY}). Nothing to do.")
+        return
 
-    # 2. Skip if the new episode has not been posted yet.
+    # 2. Skip if today's episode has not been posted yet (cron retries next hour).
     print("Checking latest episode metadata...")
     upload_date, duration = get_latest_metadata()
     print(f"Latest upload_date={upload_date}, duration={duration}s")
@@ -283,11 +280,16 @@ def main():
     print(f"\nUsing video: {video_file}")
     extract_infographic(video_file)
 
-    # 4. Publish.
+    # 4. Publish the single image, then record success so the cron stops for today.
     if client is not None:
-        upload_results(client, write_marker=not FORCE)
+        upload_results(client)
     else:
         print(f"Skipping upload (R2 not configured). Local image: {OUTPUT_FILE}")
+
+    if FORCE:
+        print("FORCE run: marker not written, so the scheduled run still runs today.")
+    else:
+        write_marker(TODAY)
 
     print("\nDone.")
 

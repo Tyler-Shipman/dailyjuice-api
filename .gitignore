@@ -6,4 +6,8 @@ todays_bets.png
 
 cache_*.png
 
+last_uploaded.txt
+cron.log
+env.sh
+
 __pycache__/
