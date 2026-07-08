@@ -93,6 +93,12 @@ for file in glob.glob(f"{VIDEO_NAME}.*"):
 # ==========================================================
 
 print("Downloading latest Daily Juice episode...")
+COOKIE_FILE = "/tmp/cookies.txt"
+
+shutil.copy(
+    "/etc/secrets/cookies.txt",
+    COOKIE_FILE
+)
 
 ydl_opts = {
     "playlist_items": "1",
@@ -100,8 +106,7 @@ ydl_opts = {
     "outtmpl": f"{VIDEO_NAME}.%(ext)s",
     "quiet": False,
     "ignoreerrors": True,
-    "cookiefile": "/etc/secrets/cookies.txt",
-    "no_cookie_jar": True,
+    "cookiefile": COOKIE_FILE,,
 }
 
 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
