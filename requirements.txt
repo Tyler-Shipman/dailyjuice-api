@@ -1,5 +1,5 @@
-fastapi
-uvicorn
 opencv-python-headless
-yt-dlp[default]==2026.7.4
+yt-dlp[default]
 curl-cffi
+boto3
+bgutil-ytdlp-pot-provider

@@ -1,0 +1,52 @@
+name: Daily Bets
+
+on:
+  # Hourly during the window the episode is expected to post (UTC).
+  # daily_bets.py exits cheaply until the new episode is up, then runs once
+  # and self-gates for the rest of the day via the R2 marker.
+  schedule:
+    - cron: "0 11-17 * * *"
+  # Manual trigger for testing / re-runs.
+  workflow_dispatch:
+
+# Avoid overlapping runs if one takes longer than an hour.
+concurrency:
+  group: daily-bets
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Start PO-token provider
+        # Auto-mints YouTube proof-of-origin tokens so downloads work
+        # cookieless. yt-dlp's bgutil plugin talks to it on localhost:4416.
+        run: |
+          docker run -d --name bgutil -p 4416:4416 \
+            brainicism/bgutil-ytdlp-pot-provider
+          # Give the provider a moment to come up.
+          for i in $(seq 1 15); do
+            if curl -sf http://127.0.0.1:4416/ping >/dev/null; then
+              echo "PO-token provider is ready."
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Generate and upload today's bets image
+        env:
+          YTDLP_PROXY: ${{ secrets.YTDLP_PROXY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: python daily_bets.py
