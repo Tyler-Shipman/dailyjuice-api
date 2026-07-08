@@ -100,6 +100,7 @@ ydl_opts = {
     "outtmpl": f"{VIDEO_NAME}.%(ext)s",
     "quiet": False,
     "ignoreerrors": True,
+    "cookiefile": "/etc/secrets/cookies.txt"
 }
 
 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
