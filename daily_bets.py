@@ -113,10 +113,13 @@ ydl_opts = {
     "format": "bestvideo[height<=720]+bestaudio/best[height<=720]/best",
     "outtmpl": f"{VIDEO_NAME}.%(ext)s",
     "quiet": False,
-    "ignoreerrors": True,
+    "ignoreerrors": False,
     "cookiefile": COOKIE_FILE,
-    "js_runtimes": {
-        "node": None
+    "impersonate": "chrome",
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["android", "web"]
+        }
     },
 }
 

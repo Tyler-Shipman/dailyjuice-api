@@ -3,7 +3,9 @@ FROM python:3.12-slim
 RUN apt-get update \
     && apt-get install -y nodejs npm \
     && rm -rf /var/lib/apt/lists/*
-RUN node --version && npm --version
+
+RUN npm install -g deno
+
 WORKDIR /app
 
 COPY requirements.txt .
