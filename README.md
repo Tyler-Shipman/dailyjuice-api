@@ -5,103 +5,102 @@ podcast and publishes it as a static image for an iOS Shortcut to fetch.
 
 ## How it works
 
-Generation and serving are decoupled so the fragile part never touches your
-phone:
+A **Raspberry Pi** on a home (residential) internet connection runs the scraper
+on a schedule and pushes the result to **Cloudflare R2**. The iOS Shortcut just
+fetches a static image URL.
 
 ```
-GitHub Actions cron (hourly, morning window)
-        │
-        ├─ yt-dlp ── residential/mobile proxy ──► YouTube   (no cookies)
-        │      └─ bgutil PO-token provider (auto-mints bot tokens, no account)
-        │
+Raspberry Pi (residential IP — no cookies, no proxy)
+        │  cron, hourly in a morning window
+        ├─ yt-dlp downloads only the 40–70% slice of the latest episode
         ├─ OpenCV template match (template.png) ──► todays_bets.png
-        │
         └─ upload to Cloudflare R2  (key: todays-bets.png)
 
 iOS Shortcut ──► GET https://<r2-public-url>/todays-bets.png ──► Quick Look
 ```
 
-The workflow runs hourly during the posting window. `daily_bets.py` exits
-cheaply until the new episode is up (it checks the newest playlist item's
-`upload_date`), then produces the image once and self-gates for the rest of the
-day via the `latest.json` marker in R2.
+`daily_bets.py` exits cheaply until the newest playlist item's `upload_date` is
+today, then produces the image once and self-gates for the rest of the day via
+the `latest.json` marker in R2.
 
-**Why this is reliable:** the old setup downloaded from a datacenter IP, which
-YouTube flags aggressively — so the `cookies.txt` had to be re-exported by hand
-every so often. Routing yt-dlp through a residential/mobile proxy moves traffic
-off that IP, so **no cookies are needed and nothing has to be refreshed
-manually**. The PO-token provider covers the residual bot-check prompts
-automatically.
+**Why the Pi:** the original Render setup downloaded from a datacenter IP, which
+YouTube flags aggressively — forcing a `cookies.txt` that had to be re-exported
+by hand. The Pi's residential IP is not flagged, so downloads work **cookieless**
+with **no proxy and no manual refresh**. The Pi is never exposed to the internet
+(outbound only); R2 serves the image and stays up even when the Pi is offline.
 
 ## One-time setup
 
 ### 1. Cloudflare R2
 
-1. Create an R2 bucket.
-2. Enable public access (r2.dev dev URL) or attach a custom domain. Note the
-   public base URL — the image lives at `<base-url>/todays-bets.png`.
-3. Create an R2 API token with **Object Read & Write** on the bucket. Note the
-   Account ID, Access Key ID, and Secret Access Key.
+1. Create an R2 bucket (e.g. `dailyjuice`).
+2. Enable the **Public Development URL** in the bucket's Settings — note the
+   `https://pub-xxxx.r2.dev` base URL. The image lives at
+   `<base-url>/todays-bets.png`.
+3. Create an R2 API token with **Object Read & Write**. Note the Account ID,
+   Access Key ID, and Secret Access Key.
 
-### 2. Residential / mobile proxy
+### 2. Raspberry Pi
 
-Sign up for a residential or (ideally) mobile proxy and get a **sticky** session
-endpoint of the form `http://user:pass@host:port`. Data use is ~a few MB/day
-(only the 40–70% slice of one video is downloaded), so the cheapest tier is
-plenty.
+```bash
+sudo apt update
+sudo apt install -y python3-venv python3-pip ffmpeg git
 
-### 3. GitHub repository secrets
+git clone https://github.com/Tyler-Shipman/dailyjuice-api.git
+cd dailyjuice-api
 
-Settings → Secrets and variables → Actions → New repository secret:
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
 
-| Secret | Value |
-| --- | --- |
-| `YTDLP_PROXY` | `http://user:pass@host:port` |
-| `R2_ACCOUNT_ID` | Cloudflare account ID |
-| `R2_ACCESS_KEY_ID` | R2 access key |
-| `R2_SECRET_ACCESS_KEY` | R2 secret key |
-| `R2_BUCKET` | bucket name |
+Create `~/dailyjuice-api/env.sh` with your R2 credentials (chmod 600):
 
-### 4. iOS Shortcut
+```bash
+export R2_ACCOUNT_ID="..."
+export R2_ACCESS_KEY_ID="..."
+export R2_SECRET_ACCESS_KEY="..."
+export R2_BUCKET="dailyjuice"
+```
+
+Test it end-to-end (force a real download regardless of date; does not write the
+daily marker):
+
+```bash
+cd ~/dailyjuice-api
+source env.sh
+FORCE=1 .venv/bin/python daily_bets.py
+```
+
+Then schedule it with cron (`crontab -e`). Runs hourly across a morning window —
+the script no-ops until today's episode is up, then runs once:
+
+```cron
+0 6-12 * * * cd /home/pi/dailyjuice-api && source env.sh && .venv/bin/python daily_bets.py >> /home/pi/dailyjuice-api/cron.log 2>&1
+```
+
+(Adjust the hour range to your local time / the show's posting time.)
+
+### 3. iOS Shortcut
 
 1. **Get Contents of URL** → `https://<r2-public-url>/todays-bets.png`
 2. **Quick Look** (and/or **Save to Photos** / **Set Wallpaper**)
 
 Instant, no auth, no YouTube dependency, no timeout.
 
-## Running locally
-
-```bash
-pip install -r requirements.txt
-
-# Optional: run the PO-token provider (Docker) if YouTube demands tokens.
-docker run -d -p 4416:4416 brainicism/bgutil-ytdlp-pot-provider
-
-export YTDLP_PROXY="http://user:pass@host:port"   # optional locally
-export FORCE=1                                     # bypass date/idempotency gates
-
-# Without R2_* vars set, it just writes todays_bets.png locally and skips upload.
-python daily_bets.py
-```
-
-Set the `R2_*` variables too to exercise the full upload path.
-
 ## Tuning
 
-- **Posting window** — edit the `cron` in `.github/workflows/daily-bets.yml`
-  (times are UTC).
-- **Download slice** — `SECTION_START_PERCENT` / `SECTION_END_PERCENT` in
-  `daily_bets.py`.
+- **Posting window** — the cron hour range (local time).
+- **Download slice** — `SECTION_START_PERCENT` / `SECTION_END_PERCENT`.
 - **Match sensitivity / crop** — `MATCH_THRESHOLD`, `OUTPUT_WIDTH/HEIGHT`,
-  padding in `daily_bets.py`. Re-crop `template.png` if the show's header
-  changes.
+  padding. Re-crop `template.png` if the show's header changes.
 
 ## Notes / fallbacks
 
-- GitHub scheduled workflows auto-disable after 60 days of no repo activity and
-  cron timing is best-effort (may lag a few minutes) — both are fine here.
-- If GitHub cron timing/keepalive ever matters, run the same `daily_bets.py` as
-  a **Render Cron Job** instead (needs a Dockerfile that installs `ffmpeg`).
-- If cookieless ever trips a bot check for a specific episode, add cookies back
-  via a `cookiefile` option — but sourced through the residential proxy session
-  so they last far longer.
+- Without the `R2_*` variables set, the script just writes `todays_bets.png`
+  locally and skips the upload — handy for local testing.
+- `YTDLP_PROXY` is still supported: set it to `http://user:pass@host:port` to
+  route through a residential proxy if you ever run this off-residential (e.g.
+  back on a cloud host).
+- If a rare bot-check appears on the Pi, export a browser `cookies.txt` and add a
+  `cookiefile` option — on a residential IP these last far longer than on a
+  datacenter host.
