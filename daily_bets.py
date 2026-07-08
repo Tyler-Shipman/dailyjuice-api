@@ -127,13 +127,13 @@ def base_ydl_opts(**extra):
         "playlist_items": "1",
         "quiet": False,
         "ignoreerrors": False,
-        # tv_embedded returns full formats cookieless on a residential IP,
+        # android_vr returns full formats cookieless on a residential IP,
         # with no DRM and no PO token required (the tv/ios/web clients now
         # need one or the other). Requires a JS runtime (Deno) for the
         # n-challenge. Verified against this channel.
         "extractor_args": {
             "youtube": {
-                "player_client": ["tv_embedded"],
+                "player_client": ["android_vr"],
             }
         },
     }
@@ -169,11 +169,15 @@ def download_section(duration_seconds):
     end_s = duration_seconds * SECTION_END_PERCENT
 
     opts = base_ydl_opts(
-        # Video only — we just need frames for template matching, no audio.
-        format="bestvideo[height<=720]/best[height<=720]/best",
+        # Video only (no audio needed for template matching), and prefer H.264
+        # (avc1) so the Pi can stream-copy the slice and decode frames without a
+        # slow AV1/VP9 software transcode.
+        format="bestvideo[height<=720][vcodec^=avc1]/bestvideo[height<=720]/best[height<=720]/best",
         outtmpl=f"{VIDEO_NAME}.%(ext)s",
         download_ranges=yt_dlp.utils.download_range_func(None, [(start_s, end_s)]),
-        force_keyframes_at_cuts=True,
+        # No force_keyframes_at_cuts: a keyframe-aligned stream copy is far
+        # faster on a Pi, and precise cut boundaries don't matter since we scan
+        # the whole downloaded clip.
     )
 
     last_error = None
