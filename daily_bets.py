@@ -114,10 +114,10 @@ ydl_opts = {
     "outtmpl": f"{VIDEO_NAME}.%(ext)s",
     "quiet": False,
     "ignoreerrors": False,
-    "cookiefile": COOKIE_FILE,
+#     "cookiefile": COOKIE_FILE,
     "extractor_args": {
         "youtube": {
-            "player_client": ["android", "web"]
+            "player_client": ["tv", "web_safari", "ios"]
         }
     },
 }
