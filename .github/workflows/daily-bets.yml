@@ -8,6 +8,11 @@ on:
     - cron: "0 11-17 * * *"
   # Manual trigger for testing / re-runs.
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Download the latest episode regardless of date (test the pipeline). Does not write the daily marker."
+        type: boolean
+        default: false
 
 # Avoid overlapping runs if one takes longer than an hour.
 concurrency:
@@ -44,6 +49,7 @@ jobs:
 
       - name: Generate and upload today's bets image
         env:
+          FORCE: ${{ inputs.force && '1' || '' }}
           YTDLP_PROXY: ${{ secrets.YTDLP_PROXY }}
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}

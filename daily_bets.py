@@ -98,20 +98,25 @@ def get_marker_date(client):
         raise
 
 
-def upload_results(client):
+def upload_results(client, write_marker=True):
     client.upload_file(
         OUTPUT_FILE,
         R2_BUCKET,
         R2_OUTPUT_KEY,
         ExtraArgs={"ContentType": "image/png"},
     )
-    client.put_object(
-        Bucket=R2_BUCKET,
-        Key=R2_MARKER_KEY,
-        Body=json.dumps({"date": TODAY}).encode(),
-        ContentType="application/json",
-    )
-    print(f"Uploaded {R2_OUTPUT_KEY} and {R2_MARKER_KEY} to R2 bucket {R2_BUCKET}")
+    if write_marker:
+        client.put_object(
+            Bucket=R2_BUCKET,
+            Key=R2_MARKER_KEY,
+            Body=json.dumps({"date": TODAY}).encode(),
+            ContentType="application/json",
+        )
+        print(f"Uploaded {R2_OUTPUT_KEY} and {R2_MARKER_KEY} to R2 bucket {R2_BUCKET}")
+    else:
+        # Forced/test run: publish the image but don't claim today is done,
+        # so the scheduled run still regenerates once the real episode posts.
+        print(f"Uploaded {R2_OUTPUT_KEY} to R2 bucket {R2_BUCKET} (marker not written; FORCE run)")
 
 
 # ==========================================================
@@ -280,7 +285,7 @@ def main():
 
     # 4. Publish.
     if client is not None:
-        upload_results(client)
+        upload_results(client, write_marker=not FORCE)
     else:
         print(f"Skipping upload (R2 not configured). Local image: {OUTPUT_FILE}")
 
