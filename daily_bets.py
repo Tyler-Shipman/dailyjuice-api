@@ -71,7 +71,7 @@ if os.path.exists(CACHE_FILE):
         shutil.copy(CACHE_FILE, OUTPUT_FILE)
 
     print("Done.")
-    exit(0)
+    raise SystemExit(0)
 
 
 print("No cache found. Generating today's bets image...")
@@ -93,12 +93,20 @@ for file in glob.glob(f"{VIDEO_NAME}.*"):
 # ==========================================================
 
 print("Downloading latest Daily Juice episode...")
+
+SOURCE_COOKIE_FILE = "/etc/secrets/cookies.txt"
 COOKIE_FILE = "/tmp/cookies.txt"
 
-shutil.copy(
-    "/etc/secrets/cookies.txt",
-    COOKIE_FILE
-)
+if os.path.exists(SOURCE_COOKIE_FILE):
+    shutil.copy(
+        SOURCE_COOKIE_FILE,
+        COOKIE_FILE
+    )
+else:
+    raise Exception("YouTube cookies file not found.")
+
+print(f"Using cookies: {COOKIE_FILE}")
+
 
 ydl_opts = {
     "playlist_items": "1",
@@ -106,7 +114,10 @@ ydl_opts = {
     "outtmpl": f"{VIDEO_NAME}.%(ext)s",
     "quiet": False,
     "ignoreerrors": True,
-    "cookiefile": COOKIE_FILE,,
+    "cookiefile": COOKIE_FILE,
+    "js_runtimes": {
+        "node": None
+    },
 }
 
 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
