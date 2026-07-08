@@ -115,7 +115,6 @@ ydl_opts = {
     "quiet": False,
     "ignoreerrors": False,
     "cookiefile": COOKIE_FILE,
-    "impersonate": "chrome",
     "extractor_args": {
         "youtube": {
             "player_client": ["android", "web"]
