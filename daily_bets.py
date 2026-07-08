@@ -27,13 +27,13 @@ SECTION_END_PERCENT = 0.70
 # The downloaded clip already starts at SECTION_START_PERCENT, so we scan it
 # from the beginning.
 FRAME_INTERVAL = 1           # seconds between sampled frames
-MATCH_THRESHOLD = 0.92
 
-# Crop around the detected template
-LEFT_PADDING = 40
-TOP_PADDING = 40
-OUTPUT_WIDTH = 900
-OUTPUT_HEIGHT = 550
+# The infographic is a full-screen slide, and template.png is a full frame of
+# it. We resize each video frame to the template's size and correlate the whole
+# frame, so matching is independent of the download resolution. Threshold is
+# deliberately loose: the static layout dominates, so the real slide scores far
+# above talking-head frames (~0.2) even as the date/bets text changes daily.
+MATCH_THRESHOLD = 0.60
 
 # Download retries within a single run (the hourly cron is the outer retry).
 DOWNLOAD_ATTEMPTS = 3
@@ -212,9 +212,10 @@ def extract_infographic(video_file):
     if template is None:
         raise Exception(
             "Couldn't find template.png\n"
-            "Create a crop of the orange TODAY'S BETS header."
+            "It should be a full frame of the Today's Bets slide."
         )
     template = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+    th, tw = template.shape[:2]
 
     cap = cv2.VideoCapture(video_file)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30
@@ -223,7 +224,9 @@ def extract_infographic(video_file):
     print("\nSearching for Today's Bets graphic...\n")
 
     current_frame = 0
-    found = False
+    best_score = -1.0
+    best_frame = None
+    best_ts = 0.0
 
     while True:
         cap.set(cv2.CAP_PROP_POS_FRAMES, current_frame)
@@ -231,30 +234,34 @@ def extract_infographic(video_file):
         if not success:
             break
 
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        result = cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED)
-        _, score, _, location = cv2.minMaxLoc(result)
+        # Resize the frame to the template's size and correlate the whole
+        # frame — scale-independent, since the slide fills the screen.
+        small = cv2.resize(frame, (tw, th))
+        gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+        score = float(cv2.matchTemplate(gray, template, cv2.TM_CCOEFF_NORMED).max())
 
         timestamp = current_frame / fps
         print(f"{timestamp:7.1f}s  score={score:.3f}")
 
-        if score >= MATCH_THRESHOLD:
-            print("\nFOUND!\n")
-            x, y = location
-            x = max(0, x - LEFT_PADDING)
-            y = max(0, y - TOP_PADDING)
-            crop = frame[y:y + OUTPUT_HEIGHT, x:x + OUTPUT_WIDTH]
-            cv2.imwrite(OUTPUT_FILE, crop)
-            print(f"Saved {OUTPUT_FILE} (t={timestamp:.1f}s, score={score:.3f})")
-            found = True
-            break
+        if score > best_score:
+            best_score = score
+            best_frame = frame.copy()
+            best_ts = timestamp
 
         current_frame += frame_skip
 
     cap.release()
 
-    if not found:
-        raise Exception("Could not find Today's Bets graphic.")
+    print(f"\nBest match: score={best_score:.3f} at {best_ts:.1f}s")
+
+    if best_frame is None or best_score < MATCH_THRESHOLD:
+        raise Exception(
+            f"Could not find Today's Bets graphic (best score {best_score:.3f})."
+        )
+
+    # Save the full-resolution frame — the whole infographic.
+    cv2.imwrite(OUTPUT_FILE, best_frame)
+    print(f"Saved {OUTPUT_FILE} (t={best_ts:.1f}s, score={best_score:.3f})")
 
 
 # ==========================================================
