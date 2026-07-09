@@ -281,17 +281,18 @@ def extract_infographic(video_file):
 # ==========================================================
 
 def main():
+    print(f"=== daily_bets run started {datetime.now():%Y-%m-%d %H:%M:%S} ===")
     client = r2_client() if R2_CONFIGURED else None
     if client is None:
         print("R2 not configured — running locally without the date gate or upload.")
 
     # 1. Skip if we already produced today's image (local marker).
     if not FORCE and read_marker() == TODAY:
-        print(f"Already have today's image ({TODAY}). Nothing to do.")
+        print(f"Already have today's image ({datetime.now():%Y-%m-%d %H:%M:%S}). Nothing to do.")
         return
 
     # 2. Skip if today's episode has not been posted yet (cron retries next hour).
-    print("Checking latest episode metadata...")
+    print(f"({TODAY}) Checking latest episode metadata...")
     upload_date, duration = get_latest_metadata()
     print(f"Latest upload_date={upload_date}, duration={duration}s")
 
@@ -318,7 +319,7 @@ def main():
     else:
         write_marker(TODAY)
 
-    print("\nDone.")
+    print(f"\nDone at {datetime.now():%Y-%m-%d %H:%M:%S}.")
 
 
 if __name__ == "__main__":
