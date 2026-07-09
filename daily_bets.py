@@ -35,7 +35,7 @@ FRAME_INTERVAL = 1           # seconds between sampled frames
 # MATCH_THRESHOLD is the loose floor for accepting the best frame: the static
 # layout dominates, so the real slide scores far above talking-head frames
 # (~-0.04) even as the date/bets text changes daily.
-MATCH_THRESHOLD = 0.60
+MATCH_THRESHOLD = 0.30
 # EARLY_EXIT_THRESHOLD: once a frame scores this high we're confident it's the
 # slide, so stop scanning immediately instead of finishing the clip. Today's
 # exact-match frame scores ~0.998; future days (different text) score lower, so
