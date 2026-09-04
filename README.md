@@ -12,7 +12,7 @@ fetches a static image URL.
 ```
 Raspberry Pi (residential IP — no cookies, no proxy)
         │  cron, hourly in a morning window
-        ├─ yt-dlp (tv_embedded client + Deno for the n-challenge)
+        ├─ yt-dlp (default clients + Deno for the n-challenge)
         │     downloads only the 40–70% slice of the latest episode
         ├─ OpenCV template match (template.png) ──► todays_bets.png
         └─ upload to Cloudflare R2  (key: todays-bets.png)
@@ -62,7 +62,7 @@ cd dailyjuice-api
 python3 -m venv --system-site-packages .venv
 .venv/bin/pip install -U pip
 # yt-dlp[default] bundles the yt-dlp-ejs n-challenge solver scripts.
-.venv/bin/pip install -U "yt-dlp[default]" boto3 curl-cffi
+.venv/bin/pip install -U "yt-dlp[default]>=2026.08.19" boto3 curl-cffi
 ```
 
 Create `~/dailyjuice-api/env.sh` (chmod 600) with your R2 credentials **and** the
@@ -119,3 +119,9 @@ Instant, no auth, no YouTube dependency, no timeout.
 - If a rare bot-check appears on the Pi, export a browser `cookies.txt` and add a
   `cookiefile` option — on a residential IP these last far longer than on a
   datacenter host.
+- **Do not pin `player_client`.** Pinning `android_vr` broke on 2026-08-29 when
+  YouTube started requiring a GVS PO token for that client's https formats, and
+  every run 403'd until the pin was removed. The default client set yields
+  token-free HLS formats, which the section download needs anyway (see the
+  format selector in `download_section`). Keep yt-dlp current — the version
+  floor above is the first release that exposes those HLS formats.
