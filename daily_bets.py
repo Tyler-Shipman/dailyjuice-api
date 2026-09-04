@@ -134,15 +134,11 @@ def base_ydl_opts(**extra):
         "playlist_items": "1",
         "quiet": False,
         "ignoreerrors": False,
-        # android_vr returns full formats cookieless on a residential IP,
-        # with no DRM and no PO token required (the tv/ios/web clients now
-        # need one or the other). Requires a JS runtime (Deno) for the
-        # n-challenge. Verified against this channel.
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android_vr"],
-            }
-        },
+        # No player_client pin: android_vr's https formats started requiring a
+        # GVS PO token (2026-08-29), so its URLs now 403 — instantly for a
+        # mid-file range request, or after ~10MB of a sequential one. The
+        # default client set still yields token-free HLS formats; see the
+        # format selector in download_section for why that matters.
     }
     if PROXY_URL:
         opts["proxy"] = PROXY_URL
@@ -179,7 +175,16 @@ def download_section(duration_seconds):
         # Video only (no audio needed for template matching), and prefer H.264
         # (avc1) so the Pi can stream-copy the slice and decode frames without a
         # slow AV1/VP9 software transcode.
-        format="bestvideo[height<=720][vcodec^=avc1]/bestvideo[height<=720]/best[height<=720]/best",
+        #
+        # HLS (m3u8) first, and that ordering is load-bearing: a section
+        # download of a plain https format makes ffmpeg range-request the whole
+        # file, which YouTube now 403s. HLS is segmented, so only the segments
+        # inside the range are fetched (~66MB for this slice vs 214MB whole).
+        format=(
+            "bestvideo[height<=720][vcodec^=avc1][protocol^=m3u8]/"
+            "bestvideo[height<=720][protocol^=m3u8]/"
+            "bestvideo[height<=720][vcodec^=avc1]/bestvideo[height<=720]"
+        ),
         outtmpl=f"{VIDEO_NAME}.%(ext)s",
         download_ranges=yt_dlp.utils.download_range_func(None, [(start_s, end_s)]),
         # No force_keyframes_at_cuts: a keyframe-aligned stream copy is far
